@@ -25,7 +25,13 @@ try{
    const colors=await b.until(`(()=>{const select=document.querySelector('[name="tagFilter"]'),option=select.querySelector('option:not(:checked)'),s=getComputedStyle(option);return {text:s.color,background:s.backgroundColor,scheme:getComputedStyle(select).colorScheme}})()`,player);
    const a=luminance(colors.text),c=luminance(colors.background),contrast=(Math.max(a,c)+.05)/(Math.min(a,c)+.05);assert(contrast>=4.5,JSON.stringify({appTheme,systemTheme,...colors,contrast}));assert.equal(colors.scheme,'light dark');pass(`${appTheme} Foundry / ${systemTheme} Windows preference: native option contrast ${contrast.toFixed(1)}:1`);
  }
- await ev(player,()=>{const e=document.querySelector('[name=tagFilter]');e.focus();e.size=4;e.style.height='110px';});await b.until('getComputedStyle(document.querySelector(".cj-shell button")).color==="rgb(34, 34, 34)"',player);await shot(player,'dropdown-system-light');await b.call('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'dark'}]},player);await ev(player,async()=>{await new Promise(r=>requestAnimationFrame(r));game.configureUI(game.settings.get('core','uiConfig'));});await b.until('getComputedStyle(document.querySelector(".cj-shell button")).color==="rgb(34, 34, 34)"',player);await shot(player,'dropdown-system-dark');
+ await ev(player,()=>{const e=document.querySelector('[name=tagFilter]');e.focus();e.size=4;e.style.height='110px';});
+ for(const theme of ['light','dark']){
+   await b.call('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:theme}]},player);
+   await b.until(`matchMedia('(prefers-color-scheme: ${theme})').matches&&document.querySelector('[name=tagFilter]').size===4`,player);
+   assert(await b.eval('getComputedStyle(document.querySelector(".cj-shell button")).color===getComputedStyle(document.querySelector(".cj-shell")).color',player));
+   await shot(player,`dropdown-system-${theme}`);
+ }
  await ev(player,()=>{document.querySelector('[name=tagFilter]').size=1;});await open(player,location.id);await b.eval('document.querySelector("[data-cj-action=edit]").click()',player);await b.until('!!document.querySelector(".cj-form")',player);await ev(player,async()=>{const {ChronicleApp}=await import('/modules/mjl-campaign-journal/scripts/app.mjs');for(const a of ChronicleApp.instances.values())if(a.rendered){a.dirty=false;await a.close();}game.modules.get('mjl-campaign-journal').api.openQuests();});await b.until('!!document.querySelector("[name=questFilter]")',player);assert.equal(await b.eval('getComputedStyle(document.querySelector("[name=questFilter]")).colorScheme',player),'light dark');pass('quest dropdown uses the same system color policy');
  assert.equal(b.events.filter(e=>e.method==='Runtime.exceptionThrown').length,0);pass('no unhandled JavaScript exceptions');
 }catch(error){report.error=error.stack;console.error(error);if(player)await shot(player,'gallery-theme-failure').catch(()=>{});process.exitCode=1;}

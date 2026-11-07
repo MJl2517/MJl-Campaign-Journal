@@ -12,6 +12,8 @@ const opts=(items,value)=>Object.entries(items).map(([k,v])=>`<option value="${e
 const confirm=(title,content)=>DialogV2.confirm({classes:["mjl-brand"],window:{title,icon:"fa-solid fa-book-open"},content:`<p>${esc(content)}</p>`,rejectClose:false,yes:{label:"Подтвердить"},no:{label:"Отмена"}});
 const prose=value=>`<div class="cj-prose">${esc(value).replace(/\n/g,"<br>")}</div>`;
 const actorHandle=r=>game.user.isGM&&r.type==="npc"&&r.actorUuid?`draggable="true" data-cj-actor-uuid="${esc(r.actorUuid)}" title="Перетащите на сцену, чтобы добавить токен Actor"`:"";
+const artPreview=(img,name)=>btn("preview",`<img src="${esc(img.src)}" alt="" loading="lazy" draggable="false">`,
+  `class="cj-art-preview" data-src="${esc(img.src)}" aria-label="Увеличить · ${esc(img.caption||name)}"`);
 export function recordMenuTarget(target){const record=target.closest(".cj-row,.cj-card-preview"),control=target.closest("button,a,input,textarea,select,label,summary,[contenteditable],[role=button],[data-cj-action]");return record&&(!control||control===record)?record:null;}
 export function locationChoices(includeHidden=false){return entries().filter(r=>locationSelectable(r,includeHidden)).sort((a,b)=>a.name.localeCompare(b.name,"ru"));}
 function currentLocation(uuid){return locationChoices(game.user.isGM).find(r=>r.uuid===uuid);}
@@ -128,7 +130,11 @@ export class ChronicleApp extends ApplicationV2{
     const tags=[...new Set(list.flatMap(r=>r.tags??[]))].sort((a,b)=>a.localeCompare(b,"ru"));
     const block=writeBlock(),canWrite=!block,gm=game.user.isGM,r=this.draft;
     const exists=entry(this.selected);if(!exists&&this.selected){this.draft=null;this.dirty=false;this.editing=false;}
-    const row=(e,kind)=>`<button type="button" draggable="true" data-entry="${e.id}" data-cj-action="select" class="cj-row ${e.id===this.selected?"active":""}" ${this.listMatches(e)?"":"hidden"}>${e.portrait?`<img src="${esc(e.portrait)}" alt="">`:'<i class="fa-solid fa-bookmark"></i>'}<span>${kind==="region"?"Весь регион":esc(e.name)}<small>${!e.published?"Скрыта от игроков":this.type==="quest"?`${STATUS[e.status]}${e.status==="active"&&e.deadline!=null&&e.deadline<=game.time.worldTime?" · Просрочен":""}`:(e.tags??[]).map(esc).join(" · ")}</small></span></button>`;
+    const row=(e,kind)=>{
+      const src=e.portrait||e.images?.[0]?.src,icon=e.type==="npc"?"fa-user":e.type==="location"?"fa-location-dot":"fa-scroll";
+      const hint=!e.published?"Скрыта от игроков":e.type==="quest"?`${STATUS[e.status]}${e.status==="active"&&e.deadline!=null&&e.deadline<=game.time.worldTime?" · Просрочен":""}`:(e.tags??[]).map(esc).join(" · ");
+      return `<button type="button" draggable="true" data-entry="${e.id}" data-cj-action="select" class="cj-row ${e.id===this.selected?"active":""}" ${this.listMatches(e)?"":"hidden"}>${src?`<img src="${esc(src)}" alt="" loading="lazy" draggable="false">`:`<i class="fa-solid ${icon}" aria-hidden="true"></i>`}<span>${kind==="region"?"Весь регион":esc(e.name)}${hint?`<small>${hint}</small>`:""}</span></button>`;
+    };
     const rows=this.type==="location"?groupedLocationRows(list.map(e=>{
       const link=e.pointcrawlUuid&&pointcrawlDoc(e.pointcrawlUuid)?.getFlag("mjl-pointcrawl","notebook");
       return {...e,link:link&&!link.archived?link:null};
@@ -151,7 +157,7 @@ export class ChronicleApp extends ApplicationV2{
       body=`<div class="cj-person-preview ${r.portrait?"has-portrait":""}">${portrait}<div class="cj-block-stack">${!r.portrait?tags:""}${section("Местонахождение",where,"cj-facts-block")}${section("Заметки партии",r.notes?prose(r.notes):'<p class="cj-muted">Пока нет заметок.</p>')}</div></div>`;
     }
     if(r.type==="location"){
-      const gallery=r.images?.length?section("Галерея",`<div class="cj-gallery-grid cj-gallery-preview ${r.images.length===1?"cj-single-art":""}">${r.images.map(img=>`<figure><img src="${esc(img.src)}" alt="${esc(img.caption||r.name)}" data-cj-action="preview" data-src="${esc(img.src)}">${img.caption?`<figcaption>${esc(img.caption)}</figcaption>`:""}</figure>`).join("")}</div>`):"";
+      const gallery=r.images?.length?section("Галерея",`<div class="cj-gallery-grid cj-gallery-preview">${r.images.map((img,i)=>`<figure ${i===0?'class="cj-cover"':""}>${artPreview(img,r.name)}${img.caption?`<figcaption>${esc(img.caption)}</figcaption>`:""}</figure>`).join("")}</div>`):"";
       body=`<div class="cj-block-stack">${gallery}${r.pointcrawlUuid?section("Заметки локации",btn("notebook","<i class=\"fa-solid fa-book-open\"></i> Открыть журнал локации",'class="cj-text-link"')):section("Заметки партии",r.notes?prose(r.notes):'<p class="cj-muted">Пока нет заметок.</p>')}</div>`;
     }
     if(r.type==="quest"){
@@ -169,7 +175,7 @@ export class ChronicleApp extends ApplicationV2{
     const gm=game.user.isGM,linked=r.type==="location"&&r.pointcrawlUuid;
     return `<form class="cj-form"><fieldset><div class="cj-title-row">${field("Название","name",r.name,"text",r.type==="location"&&!gm?"disabled":"")}${btn("save","Сохранить",'class="cj-primary"')}${btn("cancelEdit","Отмена")}</div>
     ${gm?`<label class="cj-check"><input type="checkbox" name="published" ${r.published?"checked":""}>Открыта игрокам</label>`:""}
-    ${r.type==="npc"?this.fold("portrait","Портрет и теги",this.npc(r),true):r.type==="location"?(gm?this.fold("location","Арты и связь с картой",this.location(r),true):""):this.quest(r)}
+    ${r.type==="npc"?this.fold("portrait","Портрет и теги",this.npc(r),true):r.type==="location"?(gm?this.fold("location","Галерея",this.location(r),true)+this.fold("pointcrawl","Связь с Pointcrawl",this.locationLink(r)):""):this.quest(r)}
     ${r.type==="npc"?this.fold("where","Текущая локация",`<div class="cj-location-editor"><span>${esc(currentLocation(r.locationUuid)?.name??locationPlaceholder(r))}</span>${btn("chooseLocation","Выбрать локацию")}</div>`,true):""}
     ${this.fold("notes","Заметки партии",linked?`<p class="cj-muted">Общие заметки ведутся в журнале Pointcrawl.</p>${btn("notebook","Открыть исходный журнал")}`:area("Общие записи","notes",r.notes),true)}
     ${gm?this.fold("gm","Заметки мастера",area("Секретные сведения","gmNotes",r.gmNotes)):""}
@@ -185,10 +191,26 @@ export class ChronicleApp extends ApplicationV2{
     const added=value.split(",").map(v=>text(v,80)),known=mergeTags(tagLibrary(),this.draft.tags,added),wanted=mergeTags(this.draft.tags,added);
     need(wanted.length<=40,"Не больше 40 тегов.");this.draft.tags=known.filter(t=>wanted.some(v=>v.toLocaleLowerCase("ru")===t.toLocaleLowerCase("ru")));this.draft.tagInput="";
   }
-  npc(r){return `<div class="cj-npc"><div class="cj-image-target" data-image-target="portrait" tabindex="0" aria-label="Портрет: перетащите или вставьте изображение">${r.portrait?`<img data-cj-action="preview" data-src="${esc(r.portrait)}" src="${esc(r.portrait)}" alt="Портрет ${esc(r.name)}">`:'<i class="fa-solid fa-user"></i>'}<p>Перетащите изображение или нажмите Ctrl+V</p>${field("Путь или ссылка","portrait",r.portrait)}${btn("picker","Выбрать арт",'data-image-target="portrait"')}</div><div>${this.tagEditor(r)}${game.user.isGM?`<div class="cj-panel cj-actor" tabindex="0" aria-label="Перетащите Actor Foundry">${field("Статблок · UUID Actor","actorUuid",r.actorUuid)}<p>Перетащите существо или персонажа из мира / компендиума.</p>${btn("actor","Открыть статблок",r.actorUuid?actorHandle(r):"disabled")}</div>`:""}</div></div>`;}
+  imageDrop(target){
+    const gallery=target==="gallery",upload=game.user.can("FILES_UPLOAD"),browse=game.user.can("FILES_BROWSE");
+    const label=upload?(gallery?"Перетащите изображения сюда":"Перетащите портрет сюда"):"Перетащите ссылку на изображение";
+    return `<div class="cj-image-target" data-image-target="${target}" tabindex="0" role="group" aria-label="${label}">
+      <div class="cj-drop-copy"><i class="fa-solid fa-image" aria-hidden="true"></i><div><strong>${label}</strong><small>Или вставьте через Ctrl+V</small></div></div>
+      <div class="cj-drop-actions">${upload?`${btn("imageFiles",gallery?"Выбрать файлы":"Выбрать файл",'class="cj-primary"')}<input type="file" accept="image/*" ${gallery?"multiple":""} data-cj-image-files hidden>`:""}
+      ${browse?btn("picker","Файлы Foundry",`data-image-target="${target}"`):""}${gallery?btn("imagePath","По ссылке"):""}</div>
+    </div>`;
+  }
+  npc(r){return `<div class="cj-npc"><div class="cj-portrait-editor">${r.portrait?artPreview({src:r.portrait},r.name):""}${this.imageDrop("portrait")}${field("Путь или ссылка","portrait",r.portrait)}</div><div>${this.tagEditor(r)}${game.user.isGM?`<div class="cj-panel cj-actor" tabindex="0" aria-label="Перетащите Actor Foundry">${field("Статблок · UUID Actor","actorUuid",r.actorUuid)}<p>Перетащите существо или персонажа из мира / компендиума.</p>${btn("actor","Открыть статблок",r.actorUuid?actorHandle(r):"disabled")}</div>`:""}</div></div>`;}
   location(r){
-    if(!game.user.isGM)return "";
-    return `<div class="cj-location-editor"><span>${esc(r.pointcrawlUuid?pointcrawlDoc(r.pointcrawlUuid)?.name??"Журнал недоступен":"Собственная карточка")}</span>${btn("choosePointcrawl","Выбрать локацию Pointcrawl")}</div>${r.pointcrawlUuid?'<p>При связывании общие заметки остаются только в исходном журнале. Скопируйте туда прежний текст перед связыванием.</p>':""}<section class="cj-gallery cj-image-target" data-image-target="gallery" tabindex="0" aria-label="Галерея локации: перетащите или вставьте изображение"><h3>Изображения локации</h3><p class="cj-muted">Галерея видна игрокам у открытых локаций.</p><p>Перетащите изображения или нажмите Ctrl+V</p><div class="cj-gallery-grid">${r.images.map((img,i)=>`<figure><img src="${esc(img.src)}" alt="${esc(img.caption||r.name)}" data-cj-action="preview" data-src="${esc(img.src)}"><input aria-label="Путь арта" name="imageSrc${i}" value="${esc(img.src)}"><input aria-label="Подпись арта" name="imageCaption${i}" value="${esc(img.caption)}">${btn("removeImage","Убрать из галереи",`data-index="${i}"`)}</figure>`).join("")}</div>${btn("picker","Выбрать арт",'data-image-target="gallery"')}${btn("imagePath","Добавить по пути")}</section>`;
+    const images=r.images.map((img,i)=>`<figure>${artPreview(img,r.name)}<div class="cj-art-fields"><div class="cj-art-controls">
+      ${i===0?'<strong class="cj-art-primary">Основной арт</strong>':btn("primaryImage","На обложку",`data-index="${i}"`)}
+      ${btn("removeImage",'<i class="fa-solid fa-trash" aria-hidden="true"></i>',`class="cj-danger" data-index="${i}" title="Убрать из галереи" aria-label="Убрать из галереи"`)}</div>
+      <input aria-label="Подпись арта" name="imageCaption${i}" value="${esc(img.caption)}" placeholder="Подпись к арту" maxlength="300">
+      <details><summary>Путь изображения</summary><input aria-label="Путь арта" name="imageSrc${i}" value="${esc(img.src)}" maxlength="2048"></details></div></figure>`).join("");
+    return `<section class="cj-gallery">${this.imageDrop("gallery")}${images?`<div class="cj-gallery-grid cj-gallery-editor">${images}</div>`:""}</section>`;
+  }
+  locationLink(r){
+    return `<div class="cj-location-editor"><span>${esc(r.pointcrawlUuid?pointcrawlDoc(r.pointcrawlUuid)?.name??"Журнал недоступен":"Собственная карточка")}</span>${btn("choosePointcrawl","Выбрать локацию Pointcrawl")}</div><p class="cj-muted">У связанной карточки общие заметки ведутся в журнале Pointcrawl, а основной арт берётся из этой галереи.</p>`;
   }
   quest(r){
     const calendar=game.time.calendar,c=r.deadline!=null?dateParts(calendar,r.deadline):dateParts(calendar,game.time.worldTime),d=r.deadlineForm??{mode:this.deadlineMode??"keep",...c,days:1,hours:0};
@@ -249,8 +271,13 @@ export class ChronicleApp extends ApplicationV2{
     for(const group of root.querySelectorAll(".cj-list [data-location-group]"))group.addEventListener("toggle",()=>{if(!this.query.trim())this.locationGroups.set(group.dataset.locationGroup,group.open);});
     this.filterRows();
     root.querySelector(".cj-form")?.addEventListener("submit",e=>{e.preventDefault();this.run(()=>this.save());});
-    root.addEventListener("click",e=>{const b=e.target.closest("[data-cj-action]");if(!b||b.disabled)return;e.preventDefault();this.run(()=>this.action(b.dataset.cjAction,b));},{signal});
+    root.addEventListener("click",e=>{
+      const b=e.target.closest("[data-cj-action]");if(!b||b.disabled)return;e.preventDefault();
+      if(b.dataset.cjAction==="imageFiles"){if(!this.busy)b.closest(".cj-image-target").querySelector("[data-cj-image-files]").click();return;}
+      this.run(()=>this.action(b.dataset.cjAction,b));
+    },{signal});
     root.addEventListener("input",e=>{
+      if(e.target.matches("[data-cj-image-files]"))return;
       const name=e.target.name;
       if(e.target.dataset.cjConditionCheck!==undefined){
         const index=Number(e.target.dataset.cjConditionCheck),done=e.target.checked;
@@ -276,9 +303,22 @@ export class ChronicleApp extends ApplicationV2{
     if(canMoveLocations)this.locationDrops(root.querySelector(".cj-list"));
     root.querySelectorAll('[data-cj-actor-uuid]').forEach(handle=>handle.addEventListener("dragstart",e=>{this.capture();if(!game.user.isGM||!this.draft?.actorUuid){e.preventDefault();return;}e.stopPropagation();e.dataTransfer.setData("text/plain",JSON.stringify({type:"Actor",uuid:this.draft.actorUuid}));e.dataTransfer.effectAllowed="copy";}));
     for(const zone of root.querySelectorAll(".cj-image-target,.cj-actor,.cj-links")){
-      zone.addEventListener("dragover",e=>{e.preventDefault();e.stopPropagation();});
-      zone.addEventListener("drop",e=>{e.preventDefault();e.stopPropagation();this.run(()=>this.drop(e,zone));});
-      if(zone.classList.contains("cj-image-target"))zone.addEventListener("paste",e=>{if(e.target.matches("input,textarea"))return;e.preventDefault();e.stopPropagation();this.run(()=>this.importImage(e.clipboardData,zone.dataset.imageTarget));});
+      const target=zone.dataset.imageTarget;
+      const clear=()=>zone.classList.remove("cj-drag-over");
+      zone.addEventListener("dragover",e=>{
+        e.preventDefault();e.stopPropagation();
+        if(!target)return;
+        const blocked=this.busy||!!writeBlock()||e.dataTransfer.types.includes("Files")&&!game.user.can("FILES_UPLOAD");
+        e.dataTransfer.dropEffect=blocked?"none":"copy";
+        zone.classList.toggle("cj-drag-over",!blocked);
+      });
+      zone.addEventListener("dragleave",e=>{if(!zone.contains(e.relatedTarget))clear();});
+      zone.addEventListener("drop",e=>{e.preventDefault();e.stopPropagation();clear();this.run(()=>target?this.importImage(e.dataTransfer,target):this.drop(e,zone));});
+      if(!target)continue;
+      zone.addEventListener("paste",e=>{if(e.target.matches("input,textarea"))return;e.preventDefault();e.stopPropagation();this.run(()=>this.importImage(e.clipboardData,target));});
+      zone.querySelector("[data-cj-image-files]")?.addEventListener("change",e=>{
+        if(e.target.files.length)this.run(()=>this.importImage(e.target,target));
+      });
     }
     if(writeBlock())for(const el of root.querySelectorAll('.cj-form input,.cj-form textarea,.cj-form select,.cj-form button'))if(!["actor","notebook","preview","openLink","reload"].includes(el.dataset.cjAction))el.disabled=true;
   }
@@ -382,33 +422,66 @@ export class ChronicleApp extends ApplicationV2{
       if(uuid!==null&&uuid!==this.draft.pointcrawlUuid){this.draft.pointcrawlUuid=uuid;this.changed();}return;
     }
     if(action==="chooseLink"){const kind=b.dataset.kind;need(["npc","location"].includes(kind),"Неизвестный тип связи.");const choices=(kind==="location"?locationChoices():entries().filter(r=>r.type==="npc"&&!r.archived)).filter(r=>!this.draft.links.includes(r.uuid));const uuid=await chooseRecord(kind==="location"?"Добавить локацию к квесту":"Добавить персонажа к квесту",choices);if(uuid&&!this.draft.links.includes(uuid)){this.draft.links.push(uuid);this.changed();}return;}
-    if(action==="picker"){need(game.user.can("FILES_BROWSE"),"Для выбора арта нужны штатные права Foundry «Просмотр файлов». Можно вставить готовый путь или ссылку.");const target=b.dataset.imageTarget;new foundry.applications.apps.FilePicker.implementation({type:"image",current:target==="portrait"?this.draft.portrait:"",callback:path=>this.run(async()=>{this.capture();this.addImage(path,target);})}).render(true);return;}
+    if(action==="picker"){
+      need(game.user.can("FILES_BROWSE"),"Для выбора арта нужны штатные права Foundry «Просмотр файлов».");
+      const target=b.dataset.imageTarget,id=this.selected;
+      new foundry.applications.apps.FilePicker.implementation({type:"image",current:target==="portrait"?this.draft.portrait:"",callback:path=>{
+        if(this.editing&&this.selected===id)this.run(()=>{this.capture();this.addImage(path,target);});
+      }}).render(true);return;
+    }
     if(action==="imagePath"){const path=await DialogV2.prompt({classes:["mjl-brand"],window:{title:"Добавить арт",icon:"fa-solid fa-image"},content:'<label>Путь Foundry или ссылка<input name="path" type="text"></label>',rejectClose:false,ok:{label:"Добавить",callback:(_e,b)=>b.form.elements.path.value}});if(path)this.addImage(path,"gallery");return;}
     if(action==="addCondition")this.draft.conditions.push({text:"",done:false});
     if(action==="removeCondition")this.draft.conditions.splice(Number(b.dataset.index),1);
     if(action==="removeImage")this.draft.images.splice(Number(b.dataset.index),1);
+    if(action==="primaryImage"){
+      const [img]=this.draft.images.splice(Number(b.dataset.index),1);
+      this.draft.images.unshift(img);
+    }
     if(action==="removeLink")this.draft.links.splice(Number(b.dataset.index),1);
     this.changed();
   }
-  addImage(path,target){need(this.editing,"Сначала откройте редактирование карточки.");path=imagePath(path);need(path,"Пустой путь изображения.");if(target==="portrait")this.draft.portrait=path;else{need(game.user.isGM,"Галерея доступна мастеру.");this.draft.images.push({src:path,caption:""});}this.changed();}
+  addImage(path,target){
+    need(this.editing,"Сначала откройте редактирование карточки.");path=imagePath(path);need(path,"Пустой путь изображения.");
+    if(target==="portrait")this.draft.portrait=path;
+    else{need(game.user.isGM&&this.draft.type==="location","Галерея доступна мастеру.");need(this.draft.images.length<100,"Не больше 100 артов.");this.draft.images.push({src:path,caption:""});}
+    this.changed();
+  }
   async importImage(data,target){
     need(this.editing,"Сначала откройте редактирование карточки.");const block=writeBlock();need(!block,block);this.capture();
-    const files=[...(data.files??[])];if(files.length){
-      const paths=[];for(const file of files){need(file.type.startsWith("image/"),"Перетащите файл изображения.");need(game.user.can("FILES_UPLOAD"),"Для загрузки файлов нужны штатные права Foundry «Загрузка файлов». Можно выбрать готовый арт или вставить ссылку.");
-        const Picker=foundry.applications.apps.FilePicker.implementation,path=`worlds/${game.world.id}/${ID}`;
-        try{await Picker.browse("data",path);}catch{await Picker.createDirectory("data",path);}
-        const suffix=file.name.split(".").pop()?.replace(/[^a-z0-9]/gi,"")||"png",named=new File([file],`${foundry.utils.randomID()}.${suffix}`,{type:file.type});
+    const draft=this.draft,files=[...(data.files??[])];
+    if(files.length){
+      need(game.user.can("FILES_UPLOAD"),"Для загрузки файлов нужны штатные права Foundry «Загрузка файлов». Можно выбрать готовый арт или вставить ссылку.");
+      need(files.every(file=>file.type.startsWith("image/")),"Выберите только файлы изображений.");
+      if(target==="gallery"){
+        need(game.user.isGM&&draft.type==="location","Галерея доступна мастеру.");
+        need(draft.images.length+files.length<=100,"Не больше 100 артов.");
+      }else need(files.length===1,"Для портрета выберите одно изображение.");
+      this.element.querySelector("footer").textContent="Загрузка изображений…";
+      const Picker=foundry.applications.apps.FilePicker.implementation,path=`worlds/${game.world.id}/${ID}`;
+      try{await Picker.browse("data",path);}catch{await Picker.createDirectory("data",path);}
+      const paths=[];
+      for(const file of files){
+        const suffix=file.name.match(/\.([a-z0-9]+)$/i)?.[1]??file.type.split("/")[1].split("+")[0],named=new File([file],`${foundry.utils.randomID()}.${suffix}`,{type:file.type});
         const result=await Picker.upload("data",path,named,{}, {notify:false});need(result?.path,"Foundry не подтвердил загрузку изображения.");paths.push(result.path);
       }
+      if(this.draft!==draft||!this.editing)return;
       for(const path of paths)this.addImage(path,target);return;
     }
-    const raw=data.getData("text/uri-list")?.split(/\r?\n/).find(v=>v&&!v.startsWith("#"))||data.getData("text/plain");need(raw,"В буфере нет изображения или ссылки.");
-    let value=raw;try{const json=JSON.parse(raw);value=json.src??json.path??json.url??raw;}catch{}this.addImage(value,target);
+    const html=document.createElement("template");
+    html.innerHTML=data.getData("text/html");
+    const image=html.content.querySelector("img")?.getAttribute("src");
+    const raw=image||data.getData("text/uri-list").split(/\r?\n/).find(v=>v&&!v.startsWith("#"))||data.getData("text/plain");
+    need(raw,"Перетащите изображение, путь Foundry или ссылку.");
+    let value=raw;
+    if(raw.trim().startsWith("{")){
+      const json=JSON.parse(raw);value=json.src??json.path??json.url;
+      need(value,"Перетащите изображение, путь Foundry или ссылку.");
+    }
+    this.addImage(value,target);
   }
   async drop(e,zone){
     need(this.editing,"Сначала откройте редактирование карточки.");const block=writeBlock();need(!block,block);this.capture();const raw=e.dataTransfer.getData("text/plain");let data;try{data=JSON.parse(raw);}catch{}
     if(zone.classList.contains("cj-actor")){need(game.user.isGM&&data?.type==="Actor","Перетащите Actor Foundry.");const actor=await Actor.implementation.fromDropData(data);need(actor,"Actor недоступен.");this.draft.actorUuid=actor.uuid;this.changed();return;}
     if(zone.classList.contains("cj-links")){const target=entries().find(r=>r.uuid===data?.uuid);need(target&&target.type!=="quest"&&(target.type!=="location"||locationChoices().some(r=>r.uuid===target.uuid)),"Перетащите доступную карточку НИП или открытой локации.");if(!this.draft.links.includes(target.uuid))this.draft.links.push(target.uuid);this.changed();return;}
-    return this.importImage(e.dataTransfer,zone.dataset.imageTarget);
   }
 }
