@@ -2,7 +2,7 @@
   "id": "mjl-campaign-journal",
   "title": "MJl - Campaign Journal",
   "description": "Персонажи, галерея локаций и общий журнал квестов партии.",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "url": "https://github.com/MJl2517/MJl-Campaign-Journal",
   "manifest": "https://raw.githubusercontent.com/MJl2517/MJl-Campaign-Journal/main/module.json",
   "download": "https://raw.githubusercontent.com/MJl2517/MJl-Campaign-Journal/main/dist/mjl-campaign-journal.zip",

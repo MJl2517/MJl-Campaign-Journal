@@ -1,7 +1,7 @@
 import {ID,PACK,TYPES,need,publicData,validatePatch,deadlineValue,esc,mergeTags,text,tagAssignments} from "./rules.mjs";
 import {syncCalendar,storedEvents} from "./calendar.mjs";
 import {initializeVault,sealed,unseal,wrapKey} from "./vault.mjs";
-import {localizeArt,artIssues,worldImagePath} from "./media.mjs";
+import {copyArt,localizeArt,artIssues,worldImagePath} from "./media.mjs";
 export const records=new Map();
 const docs=new Map();let socket,initializing,privateReady=false,queue=Promise.resolve();
 function recordByUuid(uuid){
@@ -119,6 +119,21 @@ export async function reconcile(){
 }
 export function refresh(){Hooks.callAll(`${ID}.refresh`);game.socket.emit(`module.${ID}`,{type:"refresh"});}
 function publicAccess(r,user){return r?.published&&available(r)&&game.journal.get(r.id)?.testUserPermission(user,"OBSERVER");}
+function artNotebook(uuid){
+  if(!game.modules.get("mjl-pointcrawl")?.active||typeof uuid!=="string"||!/^JournalEntry\.[a-z\d]+$/i.test(uuid))return null;
+  const doc=pointcrawlDoc(uuid);
+  return doc&&!doc.getFlag("mjl-pointcrawl","notebook").archived?doc:null;
+}
+function artCard(cards,uuid,user){
+  return cards.filter(r=>r.type==="location"&&!r.archived&&r.pointcrawlUuid===uuid&&(user.isGM||publicAccess(r,user)))
+    .sort((a,b)=>Number(b.published)-Number(a.published)||a.id.localeCompare(b.id))[0];
+}
+export function pointcrawlArt(uuid){
+  const doc=artNotebook(uuid),user=game.user;
+  if(!doc||!doc.testUserPermission(user,"OBSERVER"))return null;
+  const r=artCard(entries(),uuid,user);
+  return r?{src:r.images[0]?.src??""}:null;
+}
 function newRecord(type,isGM){
   const id=foundry.utils.randomID();
   return {id,uuid:`JournalEntry.${id}`,type,name:type==="npc"?"Новый персонаж":type==="quest"?"Новый квест":"Новая локация",notes:"",gmNotes:"",tags:[],portrait:"",actorUuid:"",locationUuid:"",images:[],pointcrawlUuid:"",published:type==="quest"||!isGM,archived:false,description:"",status:"active",conditions:[],links:[],deadline:null,revision:0,calendar:{state:"none"},notifiedDeadline:null};
@@ -154,6 +169,19 @@ export async function processRequest(args,userId){
     await game.settings.set(ID,"tagLibrary",tagLibrary().filter(t=>t.toLocaleLowerCase("ru")!==key));refresh();return {updated:affected.map(({id})=>({id,revision:records.get(id).revision}))};
   }
   let r=records.get(id);
+  if(action==="setPointcrawlArt"){
+    need(user.isGM,"Арт Pointcrawl меняет мастер.");
+    const doc=artNotebook(args.notebookUuid);need(doc,"Журнал Pointcrawl недоступен.");
+    const current=artCard([...records.values()],doc.uuid,user);
+    r=current?foundry.utils.deepClone(current):newRecord("location",true);
+    if(!current)Object.assign(r,validatePatch(r,{name:args.name,pointcrawlUuid:doc.uuid,published:true},true));
+    const src=await copyArt(args.src);need(src,"Выберите изображение.");
+    if(r.images[0]?.src!==src){
+      r.images=[{src,caption:r.images[0]?.caption??""},...r.images.slice(1)];
+      r.revision++;await save(r);
+    }
+    await publish(r);refresh();return {src};
+  }
   if(action==="prepareMapLocation"){
     need(user.isGM&&locationSelectable(r,true),"Выберите существующую локацию вне архива.");
     await publish(r,{placeholder:true});

@@ -1,5 +1,5 @@
 import {ID,TITLE,TYPES,need} from "./rules.mjs";
-import {initialize,loadPrivate,connectSocket,enqueue,reconcile,checkDeadlines,entries,entry,request,available} from "./store.mjs";
+import {initialize,loadPrivate,connectSocket,enqueue,reconcile,checkDeadlines,entries,entry,request,available,pointcrawlArt} from "./store.mjs";
 import {ChronicleApp,TagLibraryApp,locationChoices} from "./app.mjs";
 import {registerVault,VaultMenu} from "./vault.mjs";
 class NPCMenu extends ChronicleApp{constructor(){super({id:`${ID}-npc`});this.type="npc";ChronicleApp.instances.set(this.type,this);}}
@@ -29,7 +29,8 @@ Hooks.once("ready",async()=>{
         if(name)({id}=await request({action:"create",type:"location",values:{name}}));
         return (await request({action:"prepareMapLocation",id})).id;
       },
-      openMapLocation});
+      openMapLocation,pointcrawlArt,
+      setPointcrawlArt:({notebookUuid,name,src})=>request({action:"setPointcrawlArt",notebookUuid,name,src})});
     game.socket.on(`module.${ID}`,message=>{if(message?.type==="refresh"){if(game.user.isGM&&!game.users.activeGM?.isSelf)loadPrivate().then(render).catch(notify);else render();}if(message?.type==="overdue"){const r=entry(message.id);if(r)ui.notifications.warn(`Просрочен квест: ${r.name}`);}});
     await initialize();if(game.users.activeGM?.isSelf){await enqueue(reconcile);await enqueue(checkDeadlines);}render();
   }catch(e){notify(e);}
