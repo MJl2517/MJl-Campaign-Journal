@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/check.mjs && node tests/media.mjs",
+    "test:foundry": "node tests/foundry.mjs",
+    "test:edges": "node tests/edges.mjs",
+    "test:cards": "node tests/cards.mjs",
+    "test:toolbar": "node tests/toolbar.mjs",
+    "test:interactions": "node tests/interactions.mjs",
+    "test:storage": "node tests/storage.mjs",
+    "test:refinements": "node tests/refinements.mjs",
+    "test:gallery-theme": "node tests/gallery-theme.mjs",
+    "test:actor-drag-status": "node tests/actor-drag-status.mjs",
+    "test:pointer-drag": "node tests/pointer-actor-drag.mjs"
+  }
+}
